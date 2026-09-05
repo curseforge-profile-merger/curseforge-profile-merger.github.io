@@ -11,23 +11,44 @@
     <header>
       <p class="eyebrow">Minecraft · CurseForge</p>
       <h1>Profile Merger</h1>
-      <p class="lead">Объединяет два экспортированных CurseForge-профиля прямо в браузере. Файлы никуда не отправляются.</p>
+      <p class="lead">Объединяет два CurseForge-профиля прямо в браузере. Можно вставить share-ссылки или выбрать экспортированные ZIP.</p>
     </header>
 
-    <section class="card grid two">
-      <label class="filebox" id="dropA">
+    <section class="card grid two sources">
+      <div class="source-card">
         <span class="label">Профиль A</span>
-        <strong id="nameA">Выберите ZIP</strong>
-        <small>Исходный или дополнительный профиль</small>
-        <input id="fileA" type="file" accept=".zip,application/zip" />
-      </label>
+        <label class="field compact" for="shareA">
+          <span>CurseForge share-ссылка или код</span>
+          <input id="shareA" type="text" autocomplete="off" spellcheck="false" placeholder="https://www.curseforge.com/minecraft/share/ffy4iC_2" />
+        </label>
+        <div class="or"><span>или</span></div>
+        <label class="filebox" id="dropA">
+          <strong id="nameA">Выберите ZIP</strong>
+          <small>Исходный или дополнительный профиль</small>
+          <input id="fileA" type="file" accept=".zip,application/zip" />
+        </label>
+        <small id="sourceStatusA" class="source-status"></small>
+      </div>
 
-      <label class="filebox" id="dropB">
+      <div class="source-card">
         <span class="label">Профиль B</span>
-        <strong id="nameB">Выберите ZIP</strong>
-        <small>По умолчанию используется как основа</small>
-        <input id="fileB" type="file" accept=".zip,application/zip" />
-      </label>
+        <label class="field compact" for="shareB">
+          <span>CurseForge share-ссылка или код</span>
+          <input id="shareB" type="text" autocomplete="off" spellcheck="false" placeholder="https://www.curseforge.com/minecraft/share/…" />
+        </label>
+        <div class="or"><span>или</span></div>
+        <label class="filebox" id="dropB">
+          <strong id="nameB">Выберите ZIP</strong>
+          <small>По умолчанию используется как основа</small>
+          <input id="fileB" type="file" accept=".zip,application/zip" />
+        </label>
+        <small id="sourceStatusB" class="source-status"></small>
+      </div>
+    </section>
+
+    <section class="card info-card">
+      <strong>Share-ссылки действуют 7 дней.</strong>
+      <span>При использовании ссылки сервис скачивает профиль с CurseForge в ваш браузер. Локально выбранные ZIP никуда не отправляются.</span>
     </section>
 
     <section class="card controls">
