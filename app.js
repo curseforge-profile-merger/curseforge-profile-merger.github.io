@@ -1,7 +1,7 @@
 /* global JSZip */
 const $ = (id) => document.getElementById(id);
 const state = { A: null, B: null, analysis: null, outputUrl: null, reportUrl: null };
-const SHARE_API_PREFIX = "https://api.curseforge.com/v1/shared-profile/";
+const SHARE_RESOLVER_URL = String(window.CFPM_SHARE_RESOLVER || "").trim();
 const MAX_SHARED_PROFILE_BYTES = 300 * 1024 * 1024;
 
 function esc(value) {
@@ -69,31 +69,49 @@ function setSourceStatus(label, text, kind = "") {
 async function fetchSharedProfile(raw, label) {
   const code = parseShareCode(raw);
   if (!code) throw new Error(`Не указан share-код профиля ${label}.`);
-  const apiUrl = `${SHARE_API_PREFIX}${encodeURIComponent(code)}`;
-  setSourceStatus(label, `Скачиваю профиль ${code} с CurseForge…`, "loading");
-
-  let response;
-  try {
-    response = await fetch(apiUrl, {
-      method: "GET",
-      redirect: "follow",
-      cache: "no-store",
-      credentials: "omit"
-    });
-  } catch (e) {
-    setSourceStatus(label, "Не удалось скачать share-профиль", "error");
+  if (!SHARE_RESOLVER_URL) {
+    setSourceStatus(label, "Автоимпорт share-ссылок ещё не настроен", "error");
     throw new Error(
-      `Профиль ${label}: браузер не смог скачать CurseForge share-код ${code}. ` +
-      `Код мог истечь, либо CurseForge заблокировал запрос из браузера. Можно использовать экспортированный ZIP. (${e.message})`
+      `Профиль ${label}: для share-ссылок нужен resolver. Пока можно экспортировать профиль из CurseForge в ZIP и выбрать его здесь.`
     );
   }
 
-  if (!response.ok) {
-    setSourceStatus(label, `CurseForge вернул HTTP ${response.status}`, "error");
-    if (response.status === 404 || response.status === 410) {
-      throw new Error(`Профиль ${label}: share-код ${code} не найден или уже истёк.`);
+  setSourceStatus(label, `Получаю ссылку на профиль ${code}…`, "loading");
+  const resolverUrl = new URL(SHARE_RESOLVER_URL, window.location.href);
+  resolverUrl.searchParams.set("code", code);
+
+  let resolved;
+  try {
+    const response = await fetch(resolverUrl, { cache: "no-store", credentials: "omit" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (response.status === 404 || response.status === 410) {
+        throw new Error(data.error || `share-код ${code} не найден или уже истёк`);
+      }
+      throw new Error(data.error || `resolver вернул HTTP ${response.status}`);
     }
-    throw new Error(`Профиль ${label}: CurseForge вернул HTTP ${response.status}.`);
+    if (!data.url) throw new Error("resolver не вернул CDN-адрес");
+    resolved = new URL(data.url);
+    if (resolved.protocol !== "https:" || !(resolved.hostname === "shared-profile-media.forgecdn.net" || resolved.hostname.endsWith(".forgecdn.net"))) {
+      throw new Error("resolver вернул неожиданный адрес");
+    }
+  } catch (e) {
+    setSourceStatus(label, "Не удалось разрешить share-ссылку", "error");
+    throw new Error(`Профиль ${label}: ${e.message}. Можно использовать экспортированный ZIP.`);
+  }
+
+  setSourceStatus(label, `Скачиваю ZIP ${code} напрямую с CurseForge CDN…`, "loading");
+  let response;
+  try {
+    response = await fetch(resolved.href, { cache: "no-store", credentials: "omit" });
+  } catch (e) {
+    setSourceStatus(label, "Не удалось скачать ZIP с CurseForge CDN", "error");
+    throw new Error(`Профиль ${label}: не удалось скачать ZIP с CurseForge CDN (${e.message}).`);
+  }
+
+  if (!response.ok) {
+    setSourceStatus(label, `CDN вернул HTTP ${response.status}`, "error");
+    throw new Error(`Профиль ${label}: CurseForge CDN вернул HTTP ${response.status}.`);
   }
 
   const declaredSize = Number(response.headers.get("content-length") || 0);
@@ -107,7 +125,7 @@ async function fetchSharedProfile(raw, label) {
   }
 
   const file = new File([bytes], `curseforge-share-${code}.zip`, { type: "application/zip" });
-  setSourceStatus(label, `Загружено с CurseForge · ${code} · ${(bytes.byteLength / 1024 / 1024).toFixed(1)} МБ`, "ok");
+  setSourceStatus(label, `Загружено · ${code} · ${(bytes.byteLength / 1024 / 1024).toFixed(1)} МБ`, "ok");
   return { file, sourceType: "share", sourceLabel: `CurseForge share ${code}`, shareCode: code };
 }
 
