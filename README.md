@@ -7,7 +7,6 @@
 ## Что делает
 
 - принимает для каждого профиля либо CurseForge share-ссылку/код, либо экспортированный `.zip`;
-- для share-кода обращается к `https://api.curseforge.com/v1/shared-profile/<code>` и загружает ZIP в браузер;
 - читает `manifest.json` прямо в браузере;
 - объединяет `manifest.files` по `projectID`;
 - при одинаковом `projectID`, но разных `fileID`, оставляет версию базового профиля;
@@ -17,11 +16,34 @@
 - генерирует новый ZIP с `manifest.json` и `overrides/` в корне;
 - позволяет отдельно скачать `merge-report.json`.
 
-Локально выбранные ZIP никуда не загружаются. При использовании share-ссылки браузер скачивает соответствующий профиль с CurseForge. Share-коды CurseForge действуют 7 дней.
+Локально выбранные ZIP никуда не загружаются.
 
-## Запуск
+## Как работает импорт по share-ссылке
 
-Можно просто открыть `index.html`. Для браузеров, которые ограничивают локальные CDN-скрипты, удобнее запустить простой HTTP-сервер:
+CurseForge endpoint `https://api.curseforge.com/v1/shared-profile/<code>` отвечает редиректом на ZIP в `shared-profile-media.forgecdn.net`. Первый редирект не разрешает browser CORS, хотя сам Forge CDN разрешает загрузку из браузера.
+
+Поэтому используется маленький serverless resolver `api/share.js`:
+
+1. браузер отправляет resolver только share-код;
+2. resolver получает у CurseForge HTTP redirect и возвращает JSON с прямым Forge CDN URL;
+3. браузер скачивает ZIP напрямую с Forge CDN;
+4. ZIP разбирается и объединяется локально.
+
+Сам ZIP **не проходит через resolver**.
+
+Share-коды CurseForge действуют ограниченное время (сейчас 7 дней).
+
+### Настройка resolver
+
+`api/share.js` совместим с Vercel Functions. После деплоя укажите его публичный URL в `config.js`:
+
+```js
+window.CFPM_SHARE_RESOLVER = "https://YOUR-PROJECT.vercel.app/api/share";
+```
+
+Resolver принимает только `GET ?code=<shareCode>`, валидирует код, разрешает только CurseForge/ForgeCDN redirect и разрешает CORS только для `https://curseforge-profile-merger.github.io` и локальной разработки.
+
+## Локальный запуск
 
 ```bash
 python3 -m http.server 8080
@@ -29,9 +51,11 @@ python3 -m http.server 8080
 
 и открыть `http://localhost:8080`.
 
+Для локального импорта share-ссылок нужен доступный resolver и его адрес в `config.js`.
+
 ## GitHub Pages
 
-В репозитории есть `.github/workflows/pages.yml`. После push в `main` workflow публикует статический сайт через GitHub Pages.
+`.github/workflows/pages.yml` публикует статический сайт после push в `main`.
 
 ## Алгоритм конфликтов
 
@@ -45,7 +69,5 @@ CurseForge не принимает manifest, где один `projectID` вст�
 ## Ограничения
 
 Сервис не проверяет через CurseForge API совместимость каждого конкретного `fileID` с Minecraft/modloader. Он сравнивает метаданные двух профилей. Если версии Minecraft или семейства modloader отличаются, merge по умолчанию блокируется.
-
-Если CurseForge изменит политику CORS для `shared-profile`, браузерный импорт по ссылке может перестать работать; обычный ZIP-импорт при этом останется доступен.
 
 `overrides/mods/*.jar` могут содержать сторонние моды. Не импортируйте ZIP из недоверенного источника.
