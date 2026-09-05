@@ -24,6 +24,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Check CurseForge share CORS
+        continue-on-error: true
+        shell: bash
+        run: |
+          curl -sS -L --range 0-0 --max-time 30 \
+            -H 'Origin: https://curseforge-profile-merger.github.io' \
+            -D /tmp/cf-headers.txt -o /dev/null \
+            'https://api.curseforge.com/v1/shared-profile/ffy4iC_2' || true
+          echo '--- CurseForge/forgecdn response headers relevant to browser fetch ---'
+          grep -iE '^(HTTP/|location:|access-control-allow-origin:|access-control-allow-credentials:|content-type:)' /tmp/cf-headers.txt || true
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
