@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CurseForge Profile Merger</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container">
+    <header>
+      <p class="eyebrow">Minecraft · CurseForge</p>
+      <h1>Profile Merger</h1>
+      <p class="lead">Объединяет два экспортированных CurseForge-профиля прямо в браузере. Файлы никуда не отправляются.</p>
+    </header>
+
+    <section class="card grid two">
+      <label class="filebox" id="dropA">
+        <span class="label">Профиль A</span>
+        <strong id="nameA">Выберите ZIP</strong>
+        <small>Исходный или дополнительный профиль</small>
+        <input id="fileA" type="file" accept=".zip,application/zip" />
+      </label>
+
+      <label class="filebox" id="dropB">
+        <span class="label">Профиль B</span>
+        <strong id="nameB">Выберите ZIP</strong>
+        <small>По умолчанию используется как основа</small>
+        <input id="fileB" type="file" accept=".zip,application/zip" />
+      </label>
+    </section>
+
+    <section class="card controls">
+      <div class="field">
+        <label for="baseProfile">Какой профиль считать основой</label>
+        <select id="baseProfile">
+          <option value="B" selected>B — сохранить его manifest и overrides</option>
+          <option value="A">A — сохранить его manifest и overrides</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="outputName">Название нового профиля</label>
+        <input id="outputName" type="text" placeholder="Например: My Pack merged" />
+      </div>
+
+      <label class="check">
+        <input id="mergeOverrides" type="checkbox" />
+        <span><strong>Добавить отсутствующие файлы из overrides второго профиля</strong><small>Существующие файлы основы никогда не перезаписываются. По умолчанию выключено.</small></span>
+      </label>
+
+      <label class="check danger-check">
+        <input id="forceIncompatible" type="checkbox" />
+        <span><strong>Разрешить merge при разных Minecraft/modloader</strong><small>Может создать профиль, который CurseForge не импортирует или Minecraft не запустит.</small></span>
+      </label>
+
+      <div class="actions">
+        <button id="analyzeBtn" class="secondary">Проверить</button>
+        <button id="mergeBtn" disabled>Собрать merged ZIP</button>
+      </div>
+    </section>
+
+    <section id="result" class="card hidden" aria-live="polite"></section>
+
+    <footer>
+      <p>Алгоритм: объединение <code>manifest.files</code> по <code>projectID</code>; при конфликте версий сохраняется версия базового профиля.</p>
+    </footer>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
