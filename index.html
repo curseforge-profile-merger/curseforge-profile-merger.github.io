@@ -48,7 +48,7 @@
 
     <section class="card info-card">
       <strong>Share-ссылки действуют 7 дней.</strong>
-      <span>При использовании ссылки сервис скачивает профиль с CurseForge в ваш браузер. Локально выбранные ZIP никуда не отправляются.</span>
+      <span>Для share-ссылки небольшой resolver получает только прямой CDN-адрес; сам ZIP браузер скачивает напрямую с CurseForge CDN. Локальные ZIP никуда не отправляются.</span>
     </section>
 
     <section class="card controls">
@@ -89,6 +89,7 @@
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
