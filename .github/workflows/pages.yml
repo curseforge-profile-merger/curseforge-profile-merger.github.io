@@ -24,26 +24,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check modpacks.ch share import in Chrome
+      - name: Inspect modpacks.ch import response
         continue-on-error: true
         shell: bash
         run: |
-          BROWSER="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
-          [ -n "$BROWSER" ] || exit 0
-          mkdir -p /tmp/cf-browser-test
-          cat >/tmp/cf-browser-test/index.html <<'HTML'
-          <!doctype html><meta charset="utf-8"><div id="result">PENDING</div><script>
-          fetch('https://api.modpacks.ch/public/curseforge/import/ffy4iC_2', {credentials:'omit', cache:'no-store'})
-            .then(async r => { const t = await r.text(); document.getElementById('result').textContent = `SUCCESS status=${r.status} type=${r.headers.get('content-type')} chars=${t.length} head=${t.slice(0,120)}`; })
-            .catch(e => { document.getElementById('result').textContent = `ERROR ${e.name}: ${e.message}`; });
-          </script>
-          HTML
-          cd /tmp/cf-browser-test
-          python3 -m http.server 8765 >/tmp/cf-http.log 2>&1 &
-          SERVER_PID=$!
-          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
-          sleep 1
-          timeout 20 "$BROWSER" --headless --no-sandbox --disable-gpu --virtual-time-budget=12000 --dump-dom http://127.0.0.1:8765/ 2>/tmp/cf-chrome.err | grep -E 'SUCCESS|ERROR|PENDING' || true
+          curl -sS --max-time 30 'https://api.modpacks.ch/public/curseforge/import/ffy4iC_2' -o /tmp/import.json || true
+          echo '--- response ---'
+          cat /tmp/import.json || true
+          echo
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
