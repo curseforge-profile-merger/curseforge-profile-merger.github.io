@@ -1,28 +1,13 @@
-const ALLOWED_ORIGINS = new Set([
-  "https://curseforge-profile-merger.github.io",
-  "http://localhost:8080",
-  "http://127.0.0.1:8080"
-]);
-
-function setCors(req, res) {
-  const origin = req.headers.origin;
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-  }
+function setCors(res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 export default async function handler(req, res) {
-  setCors(req, res);
+  setCors(res);
   if (req.method === "OPTIONS") return res.status(204).end();
   if (req.method !== "GET") return res.status(405).json({ error: "Method not allowed" });
-
-  const origin = req.headers.origin;
-  if (origin && !ALLOWED_ORIGINS.has(origin)) {
-    return res.status(403).json({ error: "Origin not allowed" });
-  }
 
   const code = String(req.query.code || "").trim();
   if (!/^[A-Za-z0-9_-]+$/.test(code)) {
