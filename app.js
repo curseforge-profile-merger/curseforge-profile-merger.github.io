@@ -1,6 +1,8 @@
 /* global JSZip */
 const $ = (id) => document.getElementById(id);
-const state = { A: null, B: null, analysis: null, outputUrl: null };
+const state = { A: null, B: null, analysis: null, outputUrl: null, reportUrl: null };
+const SHARE_API_PREFIX = "https://api.curseforge.com/v1/shared-profile/";
+const MAX_SHARED_PROFILE_BYTES = 300 * 1024 * 1024;
 
 function esc(value) {
   return String(value ?? "")
@@ -31,16 +33,112 @@ function normalizeZipPath(path) {
   return p;
 }
 
-async function readProfile(file, label) {
-  if (!file) throw new Error(`Не выбран профиль ${label}`);
-  const zip = await JSZip.loadAsync(file);
+function parseShareCode(raw) {
+  const value = String(raw || "").trim();
+  if (!value) return null;
+
+  let code = value;
+  try {
+    const url = new URL(value);
+    const host = url.hostname.toLowerCase();
+    const parts = url.pathname.split("/").filter(Boolean);
+    if ((host === "www.curseforge.com" || host === "curseforge.com") && parts[0] === "minecraft" && parts[1] === "share") {
+      code = parts[2] || "";
+    } else if (host === "api.curseforge.com" && parts[0] === "v1" && parts[1] === "shared-profile") {
+      code = parts[2] || "";
+    } else {
+      throw new Error("Нужна CurseForge share-ссылка вида curseforge.com/minecraft/share/…");
+    }
+  } catch (e) {
+    if (/^https?:\/\//i.test(value)) throw e;
+  }
+
+  code = code.trim();
+  if (!/^[A-Za-z0-9_-]+$/.test(code)) {
+    throw new Error("Некорректный CurseForge share-код.");
+  }
+  return code;
+}
+
+function setSourceStatus(label, text, kind = "") {
+  const el = $(`sourceStatus${label}`);
+  el.textContent = text || "";
+  el.className = `source-status ${kind}`.trim();
+}
+
+async function fetchSharedProfile(raw, label) {
+  const code = parseShareCode(raw);
+  if (!code) throw new Error(`Не указан share-код профиля ${label}.`);
+  const apiUrl = `${SHARE_API_PREFIX}${encodeURIComponent(code)}`;
+  setSourceStatus(label, `Скачиваю профиль ${code} с CurseForge…`, "loading");
+
+  let response;
+  try {
+    response = await fetch(apiUrl, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      credentials: "omit"
+    });
+  } catch (e) {
+    setSourceStatus(label, "Не удалось скачать share-профиль", "error");
+    throw new Error(
+      `Профиль ${label}: браузер не смог скачать CurseForge share-код ${code}. ` +
+      `Код мог истечь, либо CurseForge заблокировал запрос из браузера. Можно использовать экспортированный ZIP. (${e.message})`
+    );
+  }
+
+  if (!response.ok) {
+    setSourceStatus(label, `CurseForge вернул HTTP ${response.status}`, "error");
+    if (response.status === 404 || response.status === 410) {
+      throw new Error(`Профиль ${label}: share-код ${code} не найден или уже истёк.`);
+    }
+    throw new Error(`Профиль ${label}: CurseForge вернул HTTP ${response.status}.`);
+  }
+
+  const declaredSize = Number(response.headers.get("content-length") || 0);
+  if (declaredSize > MAX_SHARED_PROFILE_BYTES) {
+    throw new Error(`Профиль ${label}: share-ZIP слишком большой (${Math.round(declaredSize / 1024 / 1024)} МБ).`);
+  }
+
+  const bytes = await response.arrayBuffer();
+  if (bytes.byteLength > MAX_SHARED_PROFILE_BYTES) {
+    throw new Error(`Профиль ${label}: share-ZIP слишком большой (${Math.round(bytes.byteLength / 1024 / 1024)} МБ).`);
+  }
+
+  const file = new File([bytes], `curseforge-share-${code}.zip`, { type: "application/zip" });
+  setSourceStatus(label, `Загружено с CurseForge · ${code} · ${(bytes.byteLength / 1024 / 1024).toFixed(1)} МБ`, "ok");
+  return { file, sourceType: "share", sourceLabel: `CurseForge share ${code}`, shareCode: code };
+}
+
+async function resolveSource(label) {
+  const share = $(`share${label}`).value.trim();
+  const localFile = $(`file${label}`).files[0];
+  if (share) return fetchSharedProfile(share, label);
+  if (localFile) {
+    setSourceStatus(label, `Локальный ZIP · ${localFile.name}`, "ok");
+    return { file: localFile, sourceType: "local", sourceLabel: localFile.name, shareCode: null };
+  }
+  throw new Error(`Не выбран профиль ${label}: вставьте share-ссылку или выберите ZIP.`);
+}
+
+async function readProfile(source, label) {
+  if (!source?.file) throw new Error(`Не выбран профиль ${label}`);
+  const file = source.file;
+  let zip;
+  try {
+    zip = await JSZip.loadAsync(file);
+  } catch (e) {
+    throw new Error(`Профиль ${label}: полученный файл не удалось открыть как ZIP: ${e.message}`);
+  }
+
   const names = Object.keys(zip.files).filter(n => !zip.files[n].dir);
   let manifestPath = names.find(n => normalizeZipPath(n) === "manifest.json");
   let prefix = "";
 
   if (!manifestPath) {
     const candidates = names.filter(n => normalizeZipPath(n).endsWith("/manifest.json"));
-    if (candidates.length !== 1) throw new Error(`В профиле ${label} не найден однозначный manifest.json в корне ZIP.`);
+    if (candidates.length !== 1) throw new Error(`В профиле ${label} не найден однозначный manifest.json.`);
     manifestPath = candidates[0];
     prefix = normalizeZipPath(manifestPath).slice(0, -"manifest.json".length);
   }
@@ -63,12 +161,13 @@ async function readProfile(file, label) {
     seen.add(key);
   }
 
-  return { label, file, zip, manifest, manifestPath, prefix };
+  return { label, ...source, zip, manifest, manifestPath, prefix };
 }
 
 function profileSummary(p) {
   return {
-    name: p.manifest.name || p.file.name,
+    name: p.manifest.name || p.sourceLabel || p.file.name,
+    source: p.sourceType === "share" ? `share:${p.shareCode}` : p.file.name,
     mc: p.manifest.minecraft.version,
     loader: primaryLoader(p.manifest),
     loaderFamily: loaderFamily(primaryLoader(p.manifest)),
@@ -108,8 +207,8 @@ function renderAnalysis(x) {
   $("result").innerHTML = `
     <div class="status ${compatible ? "ok" : "bad"}">${compatible ? "✓ Базовая совместимость профилей совпадает" : "⚠ Профили различаются по Minecraft или modloader"}</div>
     <div class="summary">
-      <div class="stat"><small>Профиль A</small><strong>${esc(x.sa.name)}</strong><br>${esc(x.sa.mc)} · ${esc(x.sa.loader)} · ${x.sa.mods} модов</div>
-      <div class="stat"><small>Профиль B</small><strong>${esc(x.sb.name)}</strong><br>${esc(x.sb.mc)} · ${esc(x.sb.loader)} · ${x.sb.mods} модов</div>
+      <div class="stat"><small>Профиль A · ${esc(x.sa.source)}</small><strong>${esc(x.sa.name)}</strong><br>${esc(x.sa.mc)} · ${esc(x.sa.loader)} · ${x.sa.mods} модов</div>
+      <div class="stat"><small>Профиль B · ${esc(x.sb.source)}</small><strong>${esc(x.sb.name)}</strong><br>${esc(x.sb.mc)} · ${esc(x.sb.loader)} · ${x.sb.mods} модов</div>
       <div class="stat"><small>Только в A / только в B</small><strong>${x.onlyA.length} / ${x.onlyB.length}</strong></div>
       <div class="stat"><small>Общие / конфликт версий</small><strong>${x.same.length} / ${x.conflicts.length}</strong></div>
     </div>
@@ -128,17 +227,20 @@ function renderAnalysis(x) {
 }
 
 async function analyze() {
+  $("analyzeBtn").disabled = true;
   $("mergeBtn").disabled = true;
   $("result").classList.remove("hidden");
-  $("result").innerHTML = "Проверяю ZIP…";
+  $("result").innerHTML = "Загружаю и проверяю профили…";
   try {
-    state.A = await readProfile($("fileA").files[0], "A");
-    state.B = await readProfile($("fileB").files[0], "B");
+    const [sourceA, sourceB] = await Promise.all([resolveSource("A"), resolveSource("B")]);
+    [state.A, state.B] = await Promise.all([readProfile(sourceA, "A"), readProfile(sourceB, "B")]);
     state.analysis = analyzeProfiles(state.A, state.B);
     renderAnalysis(state.analysis);
   } catch (e) {
     state.analysis = null;
     $("result").innerHTML = `<p class="error"><strong>Ошибка:</strong> ${esc(e.message)}</p>`;
+  } finally {
+    $("analyzeBtn").disabled = false;
   }
 }
 
@@ -153,7 +255,7 @@ async function addOverrides(targetZip, profile, existing, collisions, sourceLabe
     if (entry.dir) continue;
     const name = normalizeZipPath(rawName);
     if (!name.startsWith(root)) continue;
-    const relative = name.slice(prefix.length); // overrides/...
+    const relative = name.slice(prefix.length);
     if (!relative.startsWith("overrides/") || relative === "overrides/") continue;
     if (existing.has(relative)) {
       collisions.push({ path: relative, source: sourceLabel });
@@ -175,92 +277,120 @@ async function merge() {
     return;
   }
 
-  const baseLabel = $("baseProfile").value;
-  const addonLabel = baseLabel === "A" ? "B" : "A";
-  const base = state[baseLabel];
-  const addon = state[addonLabel];
-  const baseMap = filesMap(base);
-  const addonMap = filesMap(addon);
-  const added = [];
-  const keptConflicts = [];
+  $("mergeBtn").disabled = true;
+  try {
+    const baseLabel = $("baseProfile").value;
+    const addonLabel = baseLabel === "A" ? "B" : "A";
+    const base = state[baseLabel];
+    const addon = state[addonLabel];
+    const baseMap = filesMap(base);
+    const addonMap = filesMap(addon);
+    const added = [];
+    const keptConflicts = [];
 
-  for (const [projectID, entry] of addonMap) {
-    if (!baseMap.has(projectID)) {
-      baseMap.set(projectID, { ...entry });
-      added.push({ projectID, fileID: entry.fileID });
-    } else {
-      const current = baseMap.get(projectID);
-      if (String(current.fileID) !== String(entry.fileID)) {
-        keptConflicts.push({ projectID, kept: current.fileID, ignored: entry.fileID });
+    for (const [projectID, entry] of addonMap) {
+      if (!baseMap.has(projectID)) {
+        baseMap.set(projectID, { ...entry });
+        added.push({ projectID, fileID: entry.fileID });
+      } else {
+        const current = baseMap.get(projectID);
+        if (String(current.fileID) !== String(entry.fileID)) {
+          keptConflicts.push({ projectID, kept: current.fileID, ignored: entry.fileID });
+        }
       }
     }
+
+    const manifest = structuredClone(base.manifest);
+    manifest.files = [...baseMap.values()];
+    const chosenName = $("outputName").value.trim();
+    manifest.name = chosenName || `${manifest.name || "CurseForge profile"} + merged`;
+
+    const out = new JSZip();
+    out.file("manifest.json", JSON.stringify(manifest, null, 2));
+
+    const existing = new Set();
+    const collisions = [];
+    await addOverrides(out, base, existing, collisions, baseLabel);
+    if ($("mergeOverrides").checked) {
+      await addOverrides(out, addon, existing, collisions, addonLabel);
+    }
+    if (![...existing].some(x => x.startsWith("overrides/"))) out.folder("overrides");
+
+    const report = {
+      createdAt: new Date().toISOString(),
+      sources: {
+        A: { type: state.A.sourceType, label: state.A.sourceLabel, shareCode: state.A.shareCode },
+        B: { type: state.B.sourceType, label: state.B.sourceLabel, shareCode: state.B.shareCode }
+      },
+      baseProfile: baseLabel,
+      addonProfile: addonLabel,
+      minecraft: manifest.minecraft,
+      totalMods: manifest.files.length,
+      addedMods: added,
+      conflictsKeptFromBase: keptConflicts,
+      overrideStrategy: $("mergeOverrides").checked ? "base + missing files from addon" : "base only",
+      overrideCollisionsSkipped: collisions,
+      warning: force && (!state.analysis.mcCompatible || !state.analysis.loaderCompatible)
+        ? "Merged despite different Minecraft/modloader compatibility."
+        : null
+    };
+
+    if (state.reportUrl) URL.revokeObjectURL(state.reportUrl);
+    const reportBlob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    state.reportUrl = URL.createObjectURL(reportBlob);
+
+    const blob = await out.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
+    if (state.outputUrl) URL.revokeObjectURL(state.outputUrl);
+    state.outputUrl = URL.createObjectURL(blob);
+
+    const safeName = manifest.name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "merged-profile";
+    $("result").classList.remove("hidden");
+    $("result").innerHTML = `
+      <div class="status ok">✓ ZIP собран</div>
+      <div class="summary">
+        <div class="stat"><small>Основа</small><strong>${esc(baseLabel)}</strong></div>
+        <div class="stat"><small>Всего модов</small><strong>${manifest.files.length}</strong></div>
+        <div class="stat"><small>Добавлено из ${esc(addonLabel)}</small><strong>${added.length}</strong></div>
+        <div class="stat"><small>Конфликтов оставлено из ${esc(baseLabel)}</small><strong>${keptConflicts.length}</strong></div>
+      </div>
+      <div class="actions">
+        <a href="${state.outputUrl}" download="${esc(safeName)}.zip"><button>Скачать ${esc(safeName)}.zip</button></a>
+        <a href="${state.reportUrl}" download="${esc(safeName)}-merge-report.json"><button class="secondary">Скачать отчёт</button></a>
+      </div>
+      <p class="notice">Импортируемый ZIP содержит <code>manifest.json</code> и <code>overrides/</code>. Затем его можно импортировать в CurseForge как профиль.</p>
+    `;
+  } finally {
+    $("mergeBtn").disabled = false;
   }
-
-  const manifest = structuredClone(base.manifest);
-  manifest.files = [...baseMap.values()];
-  const chosenName = $("outputName").value.trim();
-  manifest.name = chosenName || `${manifest.name || "CurseForge profile"} + merged`;
-
-  const out = new JSZip();
-  out.file("manifest.json", JSON.stringify(manifest, null, 2));
-
-  const existing = new Set();
-  const collisions = [];
-  await addOverrides(out, base, existing, collisions, baseLabel);
-  if ($("mergeOverrides").checked) {
-    await addOverrides(out, addon, existing, collisions, addonLabel);
-  }
-  // Ensure folder exists even when empty.
-  if (![...existing].some(x => x.startsWith("overrides/"))) out.folder("overrides");
-
-  const report = {
-    createdAt: new Date().toISOString(),
-    baseProfile: baseLabel,
-    addonProfile: addonLabel,
-    minecraft: manifest.minecraft,
-    totalMods: manifest.files.length,
-    addedMods: added,
-    conflictsKeptFromBase: keptConflicts,
-    overrideStrategy: $("mergeOverrides").checked ? "base + missing files from addon" : "base only",
-    overrideCollisionsSkipped: collisions,
-    warning: force && (!state.analysis.mcCompatible || !state.analysis.loaderCompatible)
-      ? "Merged despite different Minecraft/modloader compatibility."
-      : null
-  };
-  const reportBlob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-  const reportUrl = URL.createObjectURL(reportBlob);
-
-  const blob = await out.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-  if (state.outputUrl) URL.revokeObjectURL(state.outputUrl);
-  state.outputUrl = URL.createObjectURL(blob);
-
-  const safeName = manifest.name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "merged-profile";
-  $("result").classList.remove("hidden");
-  $("result").innerHTML = `
-    <div class="status ok">✓ ZIP собран</div>
-    <div class="summary">
-      <div class="stat"><small>Основа</small><strong>${esc(baseLabel)}</strong></div>
-      <div class="stat"><small>Всего модов</small><strong>${manifest.files.length}</strong></div>
-      <div class="stat"><small>Добавлено из ${esc(addonLabel)}</small><strong>${added.length}</strong></div>
-      <div class="stat"><small>Конфликтов оставлено из ${esc(baseLabel)}</small><strong>${keptConflicts.length}</strong></div>
-    </div>
-    <div class="actions">
-      <a id="downloadLink" href="${state.outputUrl}" download="${esc(safeName)}.zip"><button>Скачать ${esc(safeName)}.zip</button></a>
-      <a href="${reportUrl}" download="${esc(safeName)}-merge-report.json"><button class="secondary">Скачать отчёт</button></a>
-    </div>
-    <p class="notice">Импортируемый ZIP содержит только <code>manifest.json</code> и <code>overrides/</code>. Перед импортом CurseForge может показать предупреждение, если в overrides есть сторонние файлы.</p>
-  `;
 }
 
-function bindFile(inputId, nameId, dropId) {
-  const input = $(inputId);
-  const name = $(nameId);
-  const drop = $(dropId);
+function invalidate() {
+  state.analysis = null;
+  $("mergeBtn").disabled = true;
+}
+
+function bindSource(label) {
+  const input = $(`file${label}`);
+  const share = $(`share${label}`);
+  const name = $(`name${label}`);
+  const drop = $(`drop${label}`);
+
   input.addEventListener("change", () => {
+    if (input.files[0]) share.value = "";
     name.textContent = input.files[0]?.name || "Выберите ZIP";
-    state.analysis = null;
-    $("mergeBtn").disabled = true;
+    setSourceStatus(label, input.files[0] ? `Локальный ZIP · ${input.files[0].name}` : "");
+    invalidate();
   });
+
+  share.addEventListener("input", () => {
+    if (share.value.trim() && input.files.length) {
+      input.value = "";
+      name.textContent = "Выберите ZIP";
+    }
+    setSourceStatus(label, share.value.trim() ? "Share-ссылка будет загружена при проверке" : "");
+    invalidate();
+  });
+
   for (const evt of ["dragenter", "dragover"]) {
     drop.addEventListener(evt, e => { e.preventDefault(); drop.classList.add("drag"); });
   }
@@ -277,8 +407,8 @@ function bindFile(inputId, nameId, dropId) {
   });
 }
 
-bindFile("fileA", "nameA", "dropA");
-bindFile("fileB", "nameB", "dropB");
+bindSource("A");
+bindSource("B");
 $("analyzeBtn").addEventListener("click", analyze);
 $("mergeBtn").addEventListener("click", merge);
 $("forceIncompatible").addEventListener("change", () => {
