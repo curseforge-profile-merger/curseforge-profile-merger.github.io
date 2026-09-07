@@ -1,6 +1,6 @@
-/* Human-readable CurseForge file versions via CFWidget's public JSON API. */
+/* Human-readable CurseForge file/project metadata via CFWidget's public JSON API. */
 (() => {
-  const CACHE_KEY = "cfpm-file-meta-v2";
+  const CACHE_KEY = "cfpm-file-meta-v3";
   const MAX_CACHE_ENTRIES = 800;
   const CONCURRENCY = 3;
   const REQUEST_GAP_MS = 180;
@@ -35,6 +35,36 @@
     return `${projectID}:${fileID}`;
   }
 
+  function cleanText(value) {
+    return String(value ?? "").replace(/\s+/g, " ").trim();
+  }
+
+  function normalizeNamedList(values) {
+    if (!Array.isArray(values)) return [];
+    const normalized = values.map(value => {
+      if (typeof value === "string") return cleanText(value);
+      if (!value || typeof value !== "object") return "";
+      return cleanText(value.name || value.title || value.username || value.slug || "");
+    }).filter(Boolean);
+    return [...new Set(normalized)];
+  }
+
+  function normalizeProjectType(value) {
+    if (typeof value === "string") return cleanText(value);
+    if (value && typeof value === "object") return cleanText(value.name || value.title || value.slug || "");
+    return "";
+  }
+
+  function emitFileMeta(projectID, fileID, meta) {
+    try {
+      window.dispatchEvent(new CustomEvent("cfpm:filemeta", {
+        detail: { projectID: String(projectID), fileID: String(fileID), meta }
+      }));
+    } catch {
+      // Metadata events are only a UI convenience.
+    }
+  }
+
   function fileToProjectMap(analysis) {
     const map = new Map();
     for (const source of [analysis?.mapA, analysis?.mapB]) {
@@ -56,7 +86,11 @@
 
   async function resolveFileMeta(projectID, fileID) {
     const key = keyFor(projectID, fileID);
-    if (memoryCache.has(key)) return memoryCache.get(key);
+    if (memoryCache.has(key)) {
+      const cached = memoryCache.get(key);
+      emitFileMeta(projectID, fileID, cached);
+      return cached;
+    }
 
     const endpoint = `https://api.cfwidget.com/${encodeURIComponent(projectID)}?version=${encodeURIComponent(fileID)}`;
     try {
@@ -75,16 +109,25 @@
       if (!download || String(download.id) !== String(fileID)) return null;
 
       const meta = {
-        display: String(download.display || "").trim(),
-        name: String(download.name || "").trim(),
-        url: String(download.url || "").trim(),
-        type: String(download.type || "").trim(),
-        versions: Array.isArray(download.versions) ? download.versions.map(String) : []
+        display: cleanText(download.display),
+        name: cleanText(download.name),
+        url: cleanText(download.url),
+        // File release channel: release / beta / alpha.
+        type: cleanText(download.type).toLowerCase(),
+        versions: Array.isArray(download.versions) ? download.versions.map(cleanText).filter(Boolean) : [],
+        // Project-level metadata. Categories are the most useful additional dimension
+        // for filtering a large installed-mod list.
+        categories: normalizeNamedList(data?.categories),
+        authors: normalizeNamedList(data?.authors),
+        projectType: normalizeProjectType(data?.type),
+        projectName: cleanText(data?.name || data?.title),
+        summary: cleanText(data?.summary)
       };
 
       if (!meta.display && !meta.name) return null;
       memoryCache.set(key, meta);
       persistCache();
+      emitFileMeta(projectID, fileID, meta);
       return meta;
     } catch {
       // Exact fileID remains visible as a graceful fallback.
@@ -169,8 +212,7 @@
 
   readPersistentCache();
 
-  // Shared with the single-profile inspector. Keeping this tiny public surface avoids
-  // duplicating CFWidget requests/cache logic in another module.
+  // Shared with the single-profile inspector and its filter UI.
   window.CFPMFileMeta = Object.freeze({ resolveFileMeta });
 
   const previousRenderAnalysis = renderAnalysis;
