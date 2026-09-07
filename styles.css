@@ -59,13 +59,25 @@ button:disabled { opacity: .45; cursor: not-allowed; }
 .stat small { color: var(--muted); display: block; margin-bottom: 5px; overflow-wrap: anywhere; }
 .stat strong { overflow-wrap: anywhere; }
 table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; }
-th, td { text-align: left; border-bottom: 1px solid var(--border); padding: 8px 5px; }
+th, td { text-align: left; border-bottom: 1px solid var(--border); padding: 8px 5px; vertical-align: top; }
 th { color: var(--muted); font-weight: 600; }
 code { background: #0d0f12; padding: 2px 5px; border-radius: 5px; }
 .notice { border-left: 3px solid var(--accent); padding-left: 12px; color: var(--muted); }
 .error { color: #ffc1c1; }
+.result-details { margin: 14px 0; border: 1px solid var(--border); border-radius: 12px; background: #111318; overflow: hidden; }
+.result-details > summary { cursor: pointer; list-style: none; padding: 12px 14px; font-weight: 750; user-select: none; }
+.result-details > summary::-webkit-details-marker { display: none; }
+.result-details > summary::before { content: "▸"; display: inline-block; margin-right: 8px; color: var(--accent); transition: transform .12s ease; }
+.result-details[open] > summary::before { transform: rotate(90deg); }
+.result-details[open] > summary { border-bottom: 1px solid var(--border); }
+.result-details .notice { margin-left: 14px; margin-right: 14px; }
+.details-scroll { overflow-x: auto; padding: 0 14px 12px; }
+.details-scroll table { min-width: 560px; }
+.report-viewer { margin-top: 12px; border: 1px solid var(--border); border-radius: 12px; background: #0d0f12; overflow: auto; max-height: 540px; }
+.report-viewer pre { margin: 0; padding: 14px; min-width: max-content; font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; white-space: pre; color: #d9dde7; }
 footer { color: var(--muted); font-size: 13px; margin: 18px 3px 60px; }
 @media (max-width: 680px) {
   .container { margin-top: 24px; }
   .grid.two, .summary { grid-template-columns: 1fr; }
+  .details-scroll { padding-left: 10px; padding-right: 10px; }
 }
