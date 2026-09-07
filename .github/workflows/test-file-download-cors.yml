@@ -8,10 +8,10 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check download endpoint headers
+      - name: Check HEAD redirects and CORS
         run: |
           set -x
-          curl -sS -D - -o /dev/null --max-time 30 \
+          curl -sS -I -L --max-redirs 5 --max-time 30 \
             -H 'Origin: https://curseforge-profile-merger.github.io' \
             -H 'User-Agent: Mozilla/5.0' \
             'https://www.curseforge.com/api/v1/mods/448233/files/6780251/download' || true
