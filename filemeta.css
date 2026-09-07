@@ -1,0 +1,40 @@
+.mod-comparison .version-link {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  max-width: 360px;
+  text-decoration: none;
+}
+
+.human-file-version {
+  color: var(--text);
+  font-weight: 700;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.human-file-name {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.human-file-id {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.version-loading {
+  opacity: .62;
+}
+
+.version-loading::after {
+  content: "получаю название…";
+  color: var(--muted);
+  font-size: 10px;
+  margin-top: 2px;
+}
