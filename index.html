@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>CurseForge Profile Merger</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="enhance-ui.css" />
 </head>
 <body>
   <main class="container">
@@ -24,7 +25,7 @@
         <div class="or"><span>или</span></div>
         <label class="filebox" id="dropA">
           <strong id="nameA">Выберите ZIP</strong>
-          <small>Исходный или дополнительный профиль</small>
+          <small id="sourceRoleA">Добавляем моды в профиль B</small>
           <input id="fileA" type="file" accept=".zip,application/zip" />
         </label>
         <small id="sourceStatusA" class="source-status"></small>
@@ -39,7 +40,7 @@
         <div class="or"><span>или</span></div>
         <label class="filebox" id="dropB">
           <strong id="nameB">Выберите ZIP</strong>
-          <small>По умолчанию используется как основа</small>
+          <small id="sourceRoleB">Основа — сохраняются manifest и overrides</small>
           <input id="fileB" type="file" accept=".zip,application/zip" />
         </label>
         <small id="sourceStatusB" class="source-status"></small>
@@ -92,5 +93,6 @@
   <script src="config.js"></script>
   <script src="app.js"></script>
   <script src="autoname.js"></script>
+  <script src="enhance-ui.js"></script>
 </body>
 </html>
