@@ -8,10 +8,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - name: Check HEAD redirects and CORS
+      - name: Check CFWidget exact file metadata and CORS
         run: |
           set -x
-          curl -sS -I -L --max-redirs 5 --max-time 30 \
+          curl -sS -D /tmp/headers.txt --max-time 30 \
             -H 'Origin: https://curseforge-profile-merger.github.io' \
             -H 'User-Agent: Mozilla/5.0' \
-            'https://www.curseforge.com/api/v1/mods/448233/files/6780251/download' || true
+            'https://api.cfwidget.com/448233?version=6780251' \
+            -o /tmp/body.json || true
+          cat /tmp/headers.txt || true
+          python - <<'PY'
+          import json
+          try:
+              data=json.load(open('/tmp/body.json'))
+              print(json.dumps({'id': data.get('id'), 'name': data.get('name'), 'download': data.get('download')}, indent=2)[:8000])
+          except Exception as e:
+              print('parse error', e)
+              print(open('/tmp/body.json').read()[:8000])
+          PY
