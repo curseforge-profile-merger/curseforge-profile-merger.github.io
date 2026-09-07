@@ -48,6 +48,20 @@
       : "";
   }
 
+  function ensureInspectorHost(sourceCard) {
+    let host = $("profileInspectorHost");
+    if (host) return host;
+
+    const sources = sourceCard.closest(".sources");
+    if (!sources) return sourceCard;
+
+    host = document.createElement("section");
+    host.id = "profileInspectorHost";
+    host.className = "profile-inspector-host";
+    sources.insertAdjacentElement("afterend", host);
+    return host;
+  }
+
   function ensureInspectorUi(label) {
     const sourceCard = $(`share${label}`)?.closest(".source-card");
     if (!sourceCard) return null;
@@ -66,7 +80,7 @@
       panel = document.createElement("div");
       panel.id = `inspectPanel${label}`;
       panel.className = "profile-inspector hidden";
-      sourceCard.append(panel);
+      ensureInspectorHost(sourceCard).append(panel);
     }
 
     return { actions, panel, button: $(`inspectBtn${label}`) };
