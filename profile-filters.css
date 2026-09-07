@@ -45,6 +45,14 @@
   text-align: center;
   color: var(--muted);
 }
+
+/* .profile-mod-item has display:grid in profile-inspector.css, which can override
+   the browser's default [hidden] rule. Keep filtering authoritative. */
+.profile-mod-item[hidden],
+.profile-filter-empty[hidden] {
+  display: none !important;
+}
+
 @media (max-width: 680px) {
   .profile-filter-selects { grid-template-columns: 1fr; }
   .profile-filter-footer { align-items: stretch; flex-direction: column; }
