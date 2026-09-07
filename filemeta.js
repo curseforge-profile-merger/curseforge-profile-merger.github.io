@@ -169,6 +169,10 @@
 
   readPersistentCache();
 
+  // Shared with the single-profile inspector. Keeping this tiny public surface avoids
+  // duplicating CFWidget requests/cache logic in another module.
+  window.CFPMFileMeta = Object.freeze({ resolveFileMeta });
+
   const previousRenderAnalysis = renderAnalysis;
   renderAnalysis = function (...args) {
     const value = previousRenderAnalysis.apply(this, args);
