@@ -1,6 +1,6 @@
 /* global JSZip */
 const $ = (id) => document.getElementById(id);
-const state = { A: null, B: null, analysis: null, outputUrl: null, reportUrl: null };
+const state = { A: null, B: null, analysis: null, outputUrl: null, reportUrl: null, report: null };
 const SHARE_RESOLVER_URL = String(window.CFPM_SHARE_RESOLVER || "").trim();
 const MAX_SHARED_PROFILE_BYTES = 300 * 1024 * 1024;
 
@@ -232,12 +232,15 @@ function renderAnalysis(x) {
     </div>
     ${!x.mcCompatible ? `<p class="error">Minecraft: A=${esc(x.sa.mc)}, B=${esc(x.sb.mc)}</p>` : ""}
     ${!x.loaderCompatible ? `<p class="error">Modloader: A=${esc(x.sa.loader)}, B=${esc(x.sb.loader)}</p>` : ""}
-    ${x.conflicts.length ? `
-      <details>
-        <summary>Конфликты версий (${x.conflicts.length})</summary>
-        <table><thead><tr><th>projectID</th><th>fileID A</th><th>fileID B</th></tr></thead><tbody>${conflictRows}</tbody></table>
+    <details class="result-details" ${x.conflicts.length ? "open" : ""}>
+      <summary>Конфликты версий (${x.conflicts.length})</summary>
+      ${x.conflicts.length ? `
+        <div class="details-scroll">
+          <table><thead><tr><th>projectID</th><th>fileID A</th><th>fileID B</th></tr></thead><tbody>${conflictRows}</tbody></table>
+        </div>
         ${x.conflicts.length > 50 ? `<p class="notice">Показаны первые 50 конфликтов.</p>` : ""}
-      </details>` : ""}
+      ` : `<p class="notice">Конфликтов версий нет.</p>`}
+    </details>
     <p class="notice">При сборке запись базового профиля выигрывает любой конфликт одного и того же <code>projectID</code>.</p>
   `;
 
@@ -352,9 +355,11 @@ async function merge() {
         ? "Merged despite different Minecraft/modloader compatibility."
         : null
     };
+    state.report = report;
 
     if (state.reportUrl) URL.revokeObjectURL(state.reportUrl);
-    const reportBlob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const reportText = JSON.stringify(report, null, 2);
+    const reportBlob = new Blob([reportText], { type: "application/json" });
     state.reportUrl = URL.createObjectURL(reportBlob);
 
     const blob = await out.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
@@ -362,6 +367,10 @@ async function merge() {
     state.outputUrl = URL.createObjectURL(blob);
 
     const safeName = manifest.name.replace(/[\\/:*?"<>|]+/g, "_").trim() || "merged-profile";
+    const conflictRows = keptConflicts.slice(0, 100).map(c =>
+      `<tr><td>${esc(c.projectID)}</td><td>${esc(c.kept)}</td><td>${esc(c.ignored)}</td></tr>`
+    ).join("");
+
     $("result").classList.remove("hidden");
     $("result").innerHTML = `
       <div class="status ok">✓ ZIP собран</div>
@@ -371,12 +380,51 @@ async function merge() {
         <div class="stat"><small>Добавлено из ${esc(addonLabel)}</small><strong>${added.length}</strong></div>
         <div class="stat"><small>Конфликтов оставлено из ${esc(baseLabel)}</small><strong>${keptConflicts.length}</strong></div>
       </div>
+
+      <details class="result-details" ${keptConflicts.length ? "open" : ""}>
+        <summary>Конфликты версий (${keptConflicts.length})</summary>
+        ${keptConflicts.length ? `
+          <div class="details-scroll">
+            <table>
+              <thead><tr><th>projectID</th><th>Оставлена версия ${esc(baseLabel)}</th><th>Проигнорирована версия ${esc(addonLabel)}</th></tr></thead>
+              <tbody>${conflictRows}</tbody>
+            </table>
+          </div>
+          ${keptConflicts.length > 100 ? `<p class="notice">Показаны первые 100 конфликтов. Полный список есть в отчёте.</p>` : ""}
+        ` : `<p class="notice">Конфликтов версий нет.</p>`}
+      </details>
+
+      ${collisions.length ? `
+        <details class="result-details">
+          <summary>Конфликты overrides (${collisions.length})</summary>
+          <div class="details-scroll">
+            <table>
+              <thead><tr><th>Файл</th><th>Источник</th></tr></thead>
+              <tbody>${collisions.slice(0, 100).map(c => `<tr><td><code>${esc(c.path)}</code></td><td>${esc(c.source)}</td></tr>`).join("")}</tbody>
+            </table>
+          </div>
+          ${collisions.length > 100 ? `<p class="notice">Показаны первые 100 конфликтов overrides.</p>` : ""}
+        </details>
+      ` : ""}
+
       <div class="actions">
         <a href="${state.outputUrl}" download="${esc(safeName)}.zip"><button>Скачать ${esc(safeName)}.zip</button></a>
+        <button id="showReportBtn" class="secondary" type="button">Показать отчёт</button>
         <a href="${state.reportUrl}" download="${esc(safeName)}-merge-report.json"><button class="secondary">Скачать отчёт</button></a>
+      </div>
+      <div id="reportViewer" class="report-viewer hidden">
+        <pre>${esc(reportText)}</pre>
       </div>
       <p class="notice">Импортируемый ZIP содержит <code>manifest.json</code> и <code>overrides/</code>. Затем его можно импортировать в CurseForge как профиль.</p>
     `;
+
+    const showReportBtn = $("showReportBtn");
+    const reportViewer = $("reportViewer");
+    showReportBtn?.addEventListener("click", () => {
+      const willShow = reportViewer.classList.contains("hidden");
+      reportViewer.classList.toggle("hidden", !willShow);
+      showReportBtn.textContent = willShow ? "Скрыть отчёт" : "Показать отчёт";
+    });
   } finally {
     $("mergeBtn").disabled = false;
   }
@@ -384,6 +432,7 @@ async function merge() {
 
 function invalidate() {
   state.analysis = null;
+  state.report = null;
   $("mergeBtn").disabled = true;
 }
 
