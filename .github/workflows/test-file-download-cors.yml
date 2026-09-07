@@ -1,0 +1,17 @@
+name: Test CurseForge file metadata CORS
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/test-file-download-cors.yml'
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check download endpoint headers
+        run: |
+          set -x
+          curl -sS -D - -o /dev/null --max-time 30 \
+            -H 'Origin: https://curseforge-profile-merger.github.io' \
+            -H 'User-Agent: Mozilla/5.0' \
+            'https://www.curseforge.com/api/v1/mods/448233/files/6780251/download' || true
