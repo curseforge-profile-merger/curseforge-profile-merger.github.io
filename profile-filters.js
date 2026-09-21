@@ -14,7 +14,8 @@
       author: "",
       category: "",
       projectType: "",
-      releaseType: ""
+      releaseType: "",
+      side: ""
     };
   }
 
@@ -72,6 +73,31 @@
     return String(metaForRow(label, row)?.type || "").trim().toLowerCase();
   }
 
+  function sideFor(label, row) {
+    const item = itemForRow(label, row);
+    const meta = metaForRow(label, row);
+    if (!meta) return "unknown";
+
+    const categories = categoriesFor(label, row).map(value => value.toLowerCase());
+    const text = [
+      item?.name,
+      meta.projectName,
+      meta.summary,
+      meta.description,
+      meta.display,
+      meta.name,
+      ...categories
+    ].filter(Boolean).join(" ").toLowerCase();
+
+    const explicitServer = categories.some(value => value === "server utility") ||
+      /\bserver[- ]side\b|\bserver[- ]only\b|\bdedicated server\b|\bserver utility\b/.test(text);
+    const explicitClient = /\bclient[- ]side\b|\bclient[- ]only\b/.test(text);
+
+    if (explicitServer) return "server";
+    if (explicitClient) return "client";
+    return "unknown";
+  }
+
   function rowsFor(label) {
     const panel = $(`inspectPanel${label}`);
     return panel ? [...panel.querySelectorAll(".profile-mod-item")] : [];
@@ -120,6 +146,11 @@
       if (value === "beta") return "Beta";
       if (value === "alpha") return "Alpha";
     }
+    if (kind === "side") {
+      if (value === "server") return "Есть серверная часть";
+      if (value === "client") return "Только клиент";
+      if (value === "unknown") return "Не определено";
+    }
     return value;
   }
 
@@ -134,16 +165,19 @@
     const categoryCounts = optionCounts(rows.flatMap(row => categoriesFor(label, row)));
     const typeCounts = optionCounts(rows.map(row => projectTypeFor(label, row)));
     const releaseCounts = optionCounts(rows.map(row => releaseTypeFor(label, row)));
+    const sideCounts = optionCounts(rows.map(row => sideFor(label, row)));
 
     current.author = fillSelect($(`filterAuthor${label}`), authorCounts, "Все авторы", current.author);
     current.category = fillSelect($(`filterCategory${label}`), categoryCounts, "Все категории", current.category);
     current.projectType = fillSelect($(`filterType${label}`), typeCounts, "Все типы", current.projectType);
     current.releaseType = fillSelect($(`filterRelease${label}`), releaseCounts, "Все каналы", current.releaseType, "release");
+    current.side = fillSelect($(`filterSide${label}`), sideCounts, "Любая сторона", current.side);
 
     const authorWrap = toolbar.querySelector('[data-filter-wrap="author"]');
     const categoryWrap = toolbar.querySelector('[data-filter-wrap="category"]');
     const typeWrap = toolbar.querySelector('[data-filter-wrap="type"]');
     const releaseWrap = toolbar.querySelector('[data-filter-wrap="release"]');
+    const sideWrap = toolbar.querySelector('[data-filter-wrap="side"]');
 
     // Author and category are primary filters. Keep them visible even while metadata
     // is still arriving; the options fill progressively.
@@ -155,6 +189,7 @@
     // they actually divide the current profile into more than one group.
     if (typeWrap) typeWrap.hidden = typeCounts.size <= 1;
     if (releaseWrap) releaseWrap.hidden = releaseCounts.size <= 1;
+    if (sideWrap) sideWrap.hidden = false;
 
     applyFilters(label);
   }
@@ -183,7 +218,8 @@
       const matchesCategory = !current.category || categoriesFor(label, row).includes(current.category);
       const matchesType = !current.projectType || projectTypeFor(label, row) === current.projectType;
       const matchesRelease = !current.releaseType || releaseTypeFor(label, row) === current.releaseType;
-      const show = matchesQuery && matchesAuthor && matchesCategory && matchesType && matchesRelease;
+      const matchesSide = !current.side || sideFor(label, row) === current.side;
+      const show = matchesQuery && matchesAuthor && matchesCategory && matchesType && matchesRelease && matchesSide;
       row.hidden = !show;
       if (show) visible += 1;
     }
@@ -205,7 +241,7 @@
     }
     empty.hidden = visible !== 0 || rows.length === 0;
 
-    const active = Boolean(current.query || current.author || current.category || current.projectType || current.releaseType);
+    const active = Boolean(current.query || current.author || current.category || current.projectType || current.releaseType || current.side);
     const reset = $(`filterReset${label}`);
     if (reset) reset.disabled = !active;
   }
@@ -217,10 +253,11 @@
     current.category = "";
     current.projectType = "";
     current.releaseType = "";
+    current.side = "";
 
     const search = $(`filterSearch${label}`);
     if (search) search.value = "";
-    for (const id of [`filterAuthor${label}`, `filterCategory${label}`, `filterType${label}`, `filterRelease${label}`]) {
+    for (const id of [`filterAuthor${label}`, `filterCategory${label}`, `filterType${label}`, `filterRelease${label}`, `filterSide${label}`]) {
       if ($(id)) $(id).value = "";
     }
     applyFilters(label);
@@ -233,6 +270,7 @@
     const category = $(`filterCategory${label}`);
     const type = $(`filterType${label}`);
     const release = $(`filterRelease${label}`);
+    const side = $(`filterSide${label}`);
     const reset = $(`filterReset${label}`);
 
     search?.addEventListener("input", () => {
@@ -253,6 +291,10 @@
     });
     release?.addEventListener("change", () => {
       current.releaseType = release.value;
+      applyFilters(label);
+    });
+    side?.addEventListener("change", () => {
+      current.side = side.value;
       applyFilters(label);
     });
     reset?.addEventListener("click", () => resetFilters(label));
