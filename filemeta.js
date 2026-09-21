@@ -1,6 +1,6 @@
 /* Human-readable CurseForge file/project metadata via CFWidget's public JSON API. */
 (() => {
-  const CACHE_KEY = "cfpm-file-meta-v3";
+  const CACHE_KEY = "cfpm-file-meta-v4";
   const MAX_CACHE_ENTRIES = 800;
   const CONCURRENCY = 3;
   const REQUEST_GAP_MS = 180;
@@ -121,7 +121,8 @@
         authors: normalizeNamedList(data?.authors),
         projectType: normalizeProjectType(data?.type),
         projectName: cleanText(data?.name || data?.title),
-        summary: cleanText(data?.summary)
+        summary: cleanText(data?.summary),
+        description: cleanText(data?.description)
       };
 
       if (!meta.display && !meta.name) return null;
