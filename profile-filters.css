@@ -58,3 +58,5 @@
   .profile-filter-footer { align-items: stretch; flex-direction: column; }
   .profile-filter-reset { width: 100%; }
 }
+
+.profile-filter-hint { color: var(--muted); font-size: 11px; line-height: 1.35; }
