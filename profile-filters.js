@@ -328,7 +328,13 @@
         <label data-filter-wrap="release" hidden>Канал
           <select id="filterRelease${label}" data-kind="release"><option value="">Все каналы</option></select>
         </label>
+        <label data-filter-wrap="side" title="Эвристика по категориям и описанию CurseForge; не гарантирует обязательную установку на сервер.">Сторона*
+          <select id="filterSide${label}" data-kind="side">
+            <option value="">Любая сторона</option>
+          </select>
+        </label>
       </div>
+      <div class="profile-filter-hint">* «Сторона» определяется эвристически по данным CurseForge.</div>
       <div class="profile-filter-footer">
         <span id="filterCount${label}">Показано 0 из 0</span>
         <button type="button" id="filterReset${label}" class="secondary profile-filter-reset" disabled>Сбросить фильтры</button>
